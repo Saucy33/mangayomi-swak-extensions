@@ -24,6 +24,7 @@ const mangayomiSources = [
     "pkgPath": "anime/src/all/anikoto.js",
   },
 ];
+
 class DefaultExtension extends MProvider {
   constructor() {
     super();
@@ -47,9 +48,9 @@ class DefaultExtension extends MProvider {
     return this.getPreference("anikoto_base_url");
   }
 
-  async request(url,hdr){
+  async request(url, hdr) {
     var res = await this.client.get(url, hdr);
-    if(res.statusCode!=200) return null;
+    if (res.statusCode != 200) return null;
     return res.body;
   }
 
@@ -57,7 +58,7 @@ class DefaultExtension extends MProvider {
     var baseUrl = this.getBaseUrl();
     var hdr = this.getHeaders();
     var url = slug.includes(baseUrl) ? slug : baseUrl + slug;
-    return await this.request(url,hdr)
+    return await this.request(url, hdr);
   }
 
   async requestDoc(slug) {
@@ -75,10 +76,10 @@ class DefaultExtension extends MProvider {
     return new Document(res);
   }
 
-  async filter({ keyword = "", sort = "default", page = "1" }) {
+  async filter({ keyword = "", sort = "default", type = "", status = "", season = "", page = "1" }) {
     var titlePref = this.getPreference("anikoto_title_lang");
 
-    var slug = `/filter?keyword=${keyword}&type=&sort=${sort}&page=${page}`;
+    var slug = `/filter?keyword=${keyword}&type=${type}&sort=${sort}&status=${status}&season=${season}&page=${page}`;
 
     var doc = await this.requestDoc(slug);
 
@@ -89,9 +90,12 @@ class DefaultExtension extends MProvider {
       .forEach((item) => {
         var dataId = item.selectFirst(".tip").attr("data-tip");
         var nameSection = item.selectFirst(".d-title");
-        var name =
-          titlePref == "e" ? nameSection.text : nameSection.attr("data-jp");
-        var imageUrl = item.selectFirst("img").attr("src");
+        var name = titlePref == "e" ? nameSection.text : nameSection.attr("data-jp");
+        
+        // FIX: Check for lazy-loaded images first before falling back to src
+        var img = item.selectFirst("img");
+        var imageUrl = img.attr("data-src") || img.attr("data-lazy-src") || img.attr("src");
+        
         var link = item.selectFirst("a").attr("href") + "||" + dataId;
         list.push({
           name,
@@ -100,24 +104,50 @@ class DefaultExtension extends MProvider {
         });
       });
 
-    var pagination = doc.selectFirst("ul.pagination").select("li");
-    var hasNextPage = !pagination.reverse()[0].className.includes("active");
+    // FIX: Added safety check to prevent crash if pagination is missing
+    var pagination = doc.selectFirst("ul.pagination");
+    var hasNextPage = false;
+    if (pagination) {
+       var lis = pagination.select("li");
+       if (lis && lis.length > 0) {
+           hasNextPage = !lis.reverse()[0].className.includes("active");
+       }
+    }
+    
     return { list, hasNextPage };
   }
 
   async getPopular(page) {
-    return await this.filter({ "sort": "most-viewed", "page": page });
+    return await this.filter({ sort: "most-viewed", page: page });
   }
 
   async getLatestUpdates(page) {
-    return await this.filter({ "sort": "latest-updated", "page": page });
+    return await this.filter({ sort: "latest-updated", page: page });
   }
 
   async search(query, page, filters) {
+    var sort = "default";
+    var type = "";
+    var status = "";
+    var season = "";
+
+    // FIX: Parse the filters array from the Mangayomi UI
+    if (filters && filters.length > 0) {
+      for (const filter of filters) {
+        if (filter.key === "sort") sort = filter.values[0].value;
+        if (filter.key === "type") type = filter.values[0].value;
+        if (filter.key === "status") status = filter.values[0].value;
+        if (filter.key === "season") season = filter.values[0].value;
+      }
+    }
+
     return await this.filter({
-      "keyword": query,
-      "sort": "default",
-      "page": page,
+      keyword: query,
+      sort: sort,
+      type: type,
+      status: status,
+      season: season,
+      page: page,
     });
   }
 
@@ -213,8 +243,61 @@ class DefaultExtension extends MProvider {
     return streams;
   }
 
+  // FIX: Implemented getFilterList so UI shows drop-downs
   getFilterList() {
-    throw new Error("getFilterList not implemented");
+    return [
+      {
+        type: "select",
+        name: "Type",
+        key: "type",
+        values: [
+          { value: "", name: "All" },
+          { value: "movie", name: "Movie" },
+          { value: "tv", name: "TV Series" },
+          { value: "ova", name: "OVA" },
+          { value: "ona", name: "ONA" },
+          { value: "special", name: "Special" },
+          { value: "music", name: "Music" }
+        ],
+      },
+      {
+        type: "select",
+        name: "Sort",
+        key: "sort",
+        values: [
+          { value: "default", name: "Default" },
+          { value: "recently-added", name: "Recently Added" },
+          { value: "latest-updated", name: "Recently Updated" },
+          { value: "score", name: "Score" },
+          { value: "name-az", name: "Name A-Z" },
+          { value: "released-date", name: "Release Date" },
+          { value: "most-watched", name: "Most Watched" }
+        ],
+      },
+      {
+        type: "select",
+        name: "Status",
+        key: "status",
+        values: [
+          { value: "", name: "All" },
+          { value: "completed", name: "Completed" },
+          { value: "airing", name: "Airing" },
+          { value: "upcoming", name: "Upcoming" }
+        ],
+      },
+      {
+        type: "select",
+        name: "Season",
+        key: "season",
+        values: [
+          { value: "", name: "All" },
+          { value: "spring", name: "Spring" },
+          { value: "summer", name: "Summer" },
+          { value: "fall", name: "Fall" },
+          { value: "winter", name: "Winter" }
+        ],
+      }
+    ];
   }
 
   formatSubtitles(subtitles, dubType) {
@@ -239,7 +322,6 @@ class DefaultExtension extends MProvider {
     var streamLinkData = await this.jsonRequest(`/ajax/server?get=${dataId}`);
     var streamEmbedUrl = streamLinkData["url"];
 
-    // 1. Mimic browser loading the player iframe from the host site cleanly
     var embedHdr = {
       "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
       "Referer": "https://anikototv.to/",
@@ -259,7 +341,6 @@ class DefaultExtension extends MProvider {
     var data_id = playerElem.attr("data-id");
     if (data_id.length < 1) return null;
 
-    // 2. Mimic the internal iframe player requesting keys/sources from its own API backend
     var apiHdr = {
       "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
       "Referer": streamEmbedUrl,
@@ -282,7 +363,6 @@ class DefaultExtension extends MProvider {
     var subtitles = streamData.tracks;
     subtitles = this.formatSubtitles(subtitles, dubType);
 
-    // 3. Final structural headers to pass out to Mangayomi's video media player engine
     var videoHdr = {
       "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
       "Referer": "https://megaplay.buzz/",
