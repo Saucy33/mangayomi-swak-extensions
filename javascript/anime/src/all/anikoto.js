@@ -13,7 +13,7 @@ const mangayomiSources = [
     "hasCloudflare": true,
     "sourceCodeUrl": "",
     "apiUrl": "",
-    "version": "1.0.4",
+    "version": "1.0.5",
     "isManga": false,
     "itemType": 1,
     "isFullData": false,
@@ -38,6 +38,7 @@ class DefaultExtension extends MProvider {
     return {
       Referer: "https://anikototv.to",
       Origin: "https://anikototv.to",
+      "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:152.0) Gecko/20100101 Firefox/152.0",
       "x-requested-with": "XMLHttpRequest",
     };
   }
@@ -242,6 +243,7 @@ class DefaultExtension extends MProvider {
     var hdr = {
       Referer: megaBuzzUrl,
       Origin: megaBuzzUrl,
+      "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:152.0) Gecko/20100101 Firefox/152.0",
     };
 
     var res = await this.request(streamEmbedUrl,hdr);
@@ -299,4 +301,4 @@ class DefaultExtension extends MProvider {
       },
     ];
   }
-  }
+}
