@@ -13,7 +13,7 @@ const mangayomiSources = [
     "hasCloudflare": true,
     "sourceCodeUrl": "",
     "apiUrl": "",
-    "version": "1.0.9",
+    "version": "1.0.10",
     "isManga": false,
     "itemType": 1,
     "isFullData": false,
@@ -92,9 +92,21 @@ class DefaultExtension extends MProvider {
         var nameSection = item.selectFirst(".d-title");
         var name = titlePref == "e" ? nameSection.text : nameSection.attr("data-jp");
         
-        // FIX: Check for lazy-loaded images first before falling back to src
+        // --- NEW: Bulletproof Cover Art Extractor ---
         var img = item.selectFirst("img");
-        var imageUrl = img.attr("data-src") || img.attr("data-lazy-src") || img.attr("src");
+        var imageUrl = "";
+        if (img) {
+            let attrs = ["data-src", "data-lazy-src", "data-original", "data-poster", "src"];
+            for (let attr of attrs) {
+                let val = img.attr(attr);
+                // Grab the first attribute that exists AND isn't a base64 transparent placeholder
+                if (val && val.length > 0 && !val.includes("data:image") && !val.includes("transparent") && !val.includes("base64")) {
+                    imageUrl = val;
+                    break;
+                }
+            }
+            if (!imageUrl) imageUrl = img.attr("src") || "";
+        }
         
         var link = item.selectFirst("a").attr("href") + "||" + dataId;
         list.push({
@@ -104,7 +116,6 @@ class DefaultExtension extends MProvider {
         });
       });
 
-    // FIX: Added safety check to prevent crash if pagination is missing
     var pagination = doc.selectFirst("ul.pagination");
     var hasNextPage = false;
     if (pagination) {
@@ -125,19 +136,22 @@ class DefaultExtension extends MProvider {
     return await this.filter({ sort: "latest-updated", page: page });
   }
 
+  // --- NEW: Adjusted to read Mangayomi's specific filter state index ---
   async search(query, page, filters) {
     var sort = "default";
     var type = "";
     var status = "";
     var season = "";
 
-    // FIX: Parse the filters array from the Mangayomi UI
     if (filters && filters.length > 0) {
       for (const filter of filters) {
-        if (filter.key === "sort") sort = filter.values[0].value;
-        if (filter.key === "type") type = filter.values[0].value;
-        if (filter.key === "status") status = filter.values[0].value;
-        if (filter.key === "season") season = filter.values[0].value;
+        if (filter.type === "SelectFilter") {
+          const value = filter.values[filter.state].value;
+          if (filter.name === "Sort") sort = value;
+          if (filter.name === "Type") type = value;
+          if (filter.name === "Status") status = value;
+          if (filter.name === "Season") season = value;
+        }
       }
     }
 
@@ -243,13 +257,12 @@ class DefaultExtension extends MProvider {
     return streams;
   }
 
-  // FIX: Implemented getFilterList so UI shows drop-downs
+  // --- NEW: Using Mangayomi's strict "SelectFilter" type so the UI renders ---
   getFilterList() {
     return [
       {
-        type: "select",
+        type: "SelectFilter",
         name: "Type",
-        key: "type",
         values: [
           { value: "", name: "All" },
           { value: "movie", name: "Movie" },
@@ -261,13 +274,12 @@ class DefaultExtension extends MProvider {
         ],
       },
       {
-        type: "select",
+        type: "SelectFilter",
         name: "Sort",
-        key: "sort",
         values: [
           { value: "default", name: "Default" },
           { value: "recently-added", name: "Recently Added" },
-          { value: "latest-updated", name: "Recently Updated" },
+          { value: "recently-updated", name: "Recently Updated" },
           { value: "score", name: "Score" },
           { value: "name-az", name: "Name A-Z" },
           { value: "released-date", name: "Release Date" },
@@ -275,9 +287,8 @@ class DefaultExtension extends MProvider {
         ],
       },
       {
-        type: "select",
+        type: "SelectFilter",
         name: "Status",
-        key: "status",
         values: [
           { value: "", name: "All" },
           { value: "completed", name: "Completed" },
@@ -286,9 +297,8 @@ class DefaultExtension extends MProvider {
         ],
       },
       {
-        type: "select",
+        type: "SelectFilter",
         name: "Season",
-        key: "season",
         values: [
           { value: "", name: "All" },
           { value: "spring", name: "Spring" },
