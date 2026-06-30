@@ -13,7 +13,7 @@ const mangayomiSources = [
     "hasCloudflare": true,
     "sourceCodeUrl": "",
     "apiUrl": "",
-    "version": "1.0.12",
+    "version": "1.0.13",
     "isManga": false,
     "itemType": 1,
     "isFullData": false,
@@ -106,7 +106,8 @@ class DefaultExtension extends MProvider {
             if (!imageUrl) imageUrl = img.attr("src") || "";
         }
         
-        // Proxy Injection to bypass hotlink protection
+        name = name + " | URL: " + (imageUrl ? imageUrl : "EMPTY");
+        
         if (imageUrl.startsWith("http")) {
             imageUrl = "https://wsrv.nl/?url=" + encodeURIComponent(imageUrl);
         } else if (imageUrl.startsWith("//")) {
